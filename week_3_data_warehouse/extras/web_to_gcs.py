@@ -1,66 +1,48 @@
-import io
-import os
-import requests
 import pandas as pd
-import pyarrow
+import requests
+import os
 from google.cloud import storage
 
-"""
-Pre-reqs: 
-1. `pip install pandas pyarrow google-cloud-storage`
-2. Set GOOGLE_APPLICATION_CREDENTIALS to your project/service-account key
-3. Set GCP_GCS_BUCKET as your bucket or change default value of BUCKET
-"""
+# Define parameters
+base_url = 'https://github.com/DataTalksClub/nyc-tlc-data/releases/download/green/'
+years = [2019, 2020]
+months = ['{:02d}'.format(i) for i in range(1, 13)]
+bucket_name = 'dtc_data_lake_de-zoomcamp-prj-375800'
+folder_name = 'green'
+project_id = 'de-zoomcamp-prj-375800'
+key_path = 'C:/Users/aammari/.gc/de-zoomcamp-prj-375800-02d2ce452b16.json'
 
-# services = ['fhv','green','yellow']
-init_url = 'https://nyc-tlc.s3.amazonaws.com/trip+data/'
-# switch out the bucketname
-BUCKET = os.environ.get("GCP_GCS_BUCKET", "dtc-data-lake-bucketname")
+# Create a client to access Cloud Storage
+storage_client = storage.Client.from_service_account_json(key_path)
 
+# Create the bucket if it doesn't exist
+bucket = storage_client.bucket(bucket_name)
+if not bucket.exists():
+    bucket.create(location='us')
 
-def upload_to_gcs(bucket, object_name, local_file):
-    """
-    Ref: https://cloud.google.com/storage/docs/uploading-objects#storage-upload-object-python
-    """
-    # # WORKAROUND to prevent timeout for files > 6 MB on 800 kbps upload speed.
-    # # (Ref: https://github.com/googleapis/python-storage/issues/74)
-    # storage.blob._MAX_MULTIPART_SIZE = 5 * 1024 * 1024  # 5 MB
-    # storage.blob._DEFAULT_CHUNKSIZE = 5 * 1024 * 1024  # 5 MB
-
-    client = storage.Client()
-    bucket = client.bucket(bucket)
-    blob = bucket.blob(object_name)
-    blob.upload_from_filename(local_file)
-
-
-def web_to_gcs(year, service):
-    for i in range(12):
+# Loop over years and months to download and process files
+for year in years:
+    for month in months:
+        # Download the file
+        file_name = f'green_tripdata_{year}-{month}.csv.gz'
+        file_url = f'{base_url}{file_name}'
+        response = requests.get(file_url)
         
-        # sets the month part of the file_name string
-        month = '0'+str(i+1)
-        month = month[-2:]
+        # Save the file to disk
+        file_path = file_name.replace('.csv.gz', '.parquet')
+        with open(file_name, 'wb') as f:
+            f.write(response.content)
 
-        # csv file_name 
-        file_name = service + '_tripdata_' + year + '-' + month + '.csv'
+        # Load the data from the CSV file and convert it to parquet
+        df = pd.read_csv(file_name, dtype={'VendorID': 'str', 'store_and_fwd_flag': 'str'}, low_memory=False)
+        df.to_parquet(file_path)
+        
+        # Upload the parquet file to Cloud Storage
+        blob = bucket.blob(f'{folder_name}/{file_path}')
+        blob.upload_from_filename(file_path)
 
-        # download it using requests via a pandas df
-        request_url = init_url + file_name
-        r = requests.get(request_url)
-        pd.DataFrame(io.StringIO(r.text)).to_csv(file_name)
-        print(f"Local: {file_name}")
-
-        # read it back into a parquet file
-        df = pd.read_csv(file_name)
-        file_name = file_name.replace('.csv', '.parquet')
-        df.to_parquet(file_name, engine='pyarrow')
-        print(f"Parquet: {file_name}")
-
-        # upload it to gcs 
-        upload_to_gcs(BUCKET, f"{service}/{file_name}", file_name)
-        print(f"GCS: {service}/{file_name}")
-
-
-web_to_gcs('2019', 'green')
-web_to_gcs('2020', 'green')
-# web_to_gcs('2019', 'yellow')
-# web_to_gcs('2020', 'yellow')
+        # Delete the local file
+        os.remove(file_path)
+        os.remove(file_name)
+        
+        print(f'{file_name} processed and uploaded to Cloud Storage.')

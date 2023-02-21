@@ -1,10 +1,17 @@
-import os
 from google.cloud import bigquery
 from google.cloud import storage
+import pandas as pd
+import io
 
-# Set environment variables
-os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = 'C:/Users/aammari/.gc/de-zoomcamp-prj-375800-02d2ce452b16.json'
-project_id = 'de-zoomcamp-prj-375800'
+# Define BigQuery parameters
+project_id = "de-zoomcamp-prj-375800"
+dataset_id = "trips_data_all"
+table_id = "green_tripdata"
+table_schema = []
+
+# Define GCS parameters
+bucket_name = "dtc_data_lake_de-zoomcamp-prj-375800"
+prefix = "green"
 
 # Initialize BigQuery client
 bq_client = bigquery.Client(project=project_id)
@@ -12,70 +19,55 @@ bq_client = bigquery.Client(project=project_id)
 # Initialize GCS client
 storage_client = storage.Client(project=project_id)
 
-# Set table and bucket details
-bucket_name = 'dtc_data_lake_de-zoomcamp-prj-375800'
-table_name = 'green_tripdata'
-dataset_name = 'staging'
+# Load all files into Pandas dataframes
+dfs = []
+for blob in storage_client.list_blobs(bucket_name, prefix=prefix):
+    if blob.name.endswith(".parquet"):
+        buffer = io.BytesIO()
+        blob.download_to_file(buffer)
+        buffer.seek(0)
+        df = pd.read_parquet(buffer)
+        dfs.append(df)
 
-# Set the table schema
-schema = [
-    bigquery.SchemaField('VendorID', 'INTEGER'),
-    bigquery.SchemaField('pickup_datetime', 'TIMESTAMP'),
-    bigquery.SchemaField('dropoff_datetime', 'TIMESTAMP'),
-    bigquery.SchemaField('passenger_count', 'INTEGER'),
-    bigquery.SchemaField('trip_distance', 'FLOAT'),
-    bigquery.SchemaField('pickup_longitude', 'FLOAT'),
-    bigquery.SchemaField('pickup_latitude', 'FLOAT'),
-    bigquery.SchemaField('RateCodeID', 'INTEGER'),
-    bigquery.SchemaField('store_and_fwd_flag', 'STRING'),
-    bigquery.SchemaField('dropoff_longitude', 'FLOAT'),
-    bigquery.SchemaField('dropoff_latitude', 'FLOAT'),
-    bigquery.SchemaField('payment_type', 'INTEGER'),
-    bigquery.SchemaField('fare_amount', 'FLOAT'),
-    bigquery.SchemaField('extra', 'FLOAT'),
-    bigquery.SchemaField('mta_tax', 'FLOAT'),
-    bigquery.SchemaField('tip_amount', 'FLOAT'),
-    bigquery.SchemaField('tolls_amount', 'FLOAT'),
-    bigquery.SchemaField('improvement_surcharge', 'FLOAT'),
-    bigquery.SchemaField('total_amount', 'FLOAT'),
-    bigquery.SchemaField('PULocationID', 'INTEGER'),
-    bigquery.SchemaField('DOLocationID', 'INTEGER')
-]
+# Concatenate all dataframes into one final dataframe
+final_df = pd.concat(dfs, ignore_index=True, sort=True)
 
-# Define the GCS bucket and path
-bucket = storage_client.get_bucket(bucket_name)
-blobs = bucket.list_blobs(prefix='green')
+# Check for any data type mismatches and resolve the issues
+for col in final_df.columns:
+    # If data type of a column is not consistent, convert all data in that column to string
+    if not final_df[col].apply(type).eq(final_df[col].apply(type).iloc[0]).all():
+        final_df[col] = final_df[col].astype(str)
+    # If there is a column name mismatch, rename the column to match the desired schema
+    if col not in [field.name for field in table_schema]:
+        final_df.rename(columns={col: col.lower()}, inplace=True)
 
-# Load each file into BigQuery
-for blob in blobs:
-    if 'parquet' in blob.name:
-        # Set the table ID and load job configuration
-        table_id = f"{project_id}.{dataset_name}.{table_name}"
-        job_config = bigquery.LoadJobConfig(
-            autodetect=True,
-            source_format=bigquery.SourceFormat.PARQUET,
-            write_disposition=bigquery.WriteDisposition.WRITE_TRUNCATE,
-            ignore_unknown_values=True,
-        )
+# Get the inferred schema of the final dataframe
+table_schema = []
+for column in final_df.columns:
+    dtype = final_df[column].dtype
+    if dtype == "int64":
+        bq_type = "INTEGER"
+    elif dtype == "float64":
+        bq_type = "FLOAT"
+    elif dtype == "bool":
+        bq_type = "BOOLEAN"
+    else:
+        bq_type = "STRING"
+    field_schema = bigquery.SchemaField(column, bq_type)
+    table_schema.append(field_schema)
 
-        # Load the data into BigQuery
-        print(f"Loading {blob.name} into BigQuery...")
-        uri = f"gs://{bucket_name}/{blob.name}"
-        load_job = bq_client.load_table_from_uri(uri, table_id, job_config=job_config)
+# Create a new table with the inferred schema that matches the schema of the final Pandas dataframe
+client = bigquery.Client(project=project_id)
+dataset_ref = client.dataset(dataset_id)
 
-        # Wait for the job to complete
-        load_job.result()
+table_ref = dataset_ref.table(table_id)
+table = bigquery.Table(table_ref, schema=table_schema)
 
-        # Get the newly created table and check its schema
-        table_ref = bq_client.dataset(dataset_name).table(table_name)
-        table = bq_client.get_table(table_ref)
-        print(f"Table {table.project}.{table.dataset_id}.{table.table_id} successfully loaded.")
+table = client.create_table(table)
+print(f"Created table {table.project}.{table.dataset_id}.{table.table_id}")
 
-# Create the table if it doesn't exist
-try:
-    bq_client.get_table(table_ref)
-except Exception as e:
-    print(f"Table not found: {e}. Creating table {table_name}...")
-    table = bigquery.Table(table_ref, schema=schema)
-    table = bq_client.create_table(table)
-    print(f"Table {table.project}.{table.dataset_id}.{table.table_id} successfully created.")    
+# Upload the data to the created table
+final_df.to_gbq(destination_table=f"{dataset_id}.{table_id}",
+                project_id=project_id,
+                if_exists="replace")
+print("Data uploaded to BigQuery table")

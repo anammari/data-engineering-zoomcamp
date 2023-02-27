@@ -2,6 +2,9 @@ from google.cloud import bigquery
 from google.cloud import storage
 import pandas as pd
 import io
+import dask.dataframe as dd
+import dask.diagnostics as diag
+from dask.distributed import Client, LocalCluster
 
 # Define BigQuery parameters
 project_id = "de-zoomcamp-prj-375800"
@@ -57,17 +60,31 @@ for column in final_df.columns:
     table_schema.append(field_schema)
 
 # Create a new table with the inferred schema that matches the schema of the final Pandas dataframe
-client = bigquery.Client(project=project_id)
-dataset_ref = client.dataset(dataset_id)
+bq_client = bigquery.Client(project=project_id)
+dataset_ref = bq_client.dataset(dataset_id)
 
 table_ref = dataset_ref.table(table_id)
 table = bigquery.Table(table_ref, schema=table_schema)
 
-table = client.create_table(table)
+table = bq_client.create_table(table)
 print(f"Created table {table.project}.{table.dataset_id}.{table.table_id}")
 
 # Upload the data to the created table
-final_df.to_gbq(destination_table=f"{dataset_id}.{table_id}",
-                project_id=project_id,
-                if_exists="replace")
+# Create a Dask client to distribute the computation
+cluster = LocalCluster(n_workers=4, threads_per_worker=1, memory_limit='4GB')
+client = Client(cluster)
+
+# Create a Dask dataframe from the Pandas dataframe
+dask_df = dd.from_pandas(final_df, npartitions=4)
+
+# Write the Dask dataframe to BigQuery table
+with diag.ProgressBar(), diag.ResourceProfiler(dt=0.25) as rprof, diag.PerformanceReport() as dask_report:
+    dask_df.to_gbq(destination_table=f"{dataset_id}.{table_id}",
+                   project_id=project_id,
+                   if_exists="replace",
+                   progress_bar=True)
+
 print("Data uploaded to BigQuery table")
+
+# Shut down the Dask client
+client.shutdown()

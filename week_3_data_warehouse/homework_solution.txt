@@ -1,0 +1,68 @@
+Question 1. 
+SELECT COUNT(*) as fhv_vehicle_count 
+FROM `de-zoomcamp-prj-375800.fhv_2019.fhv_tripdata_2019`
+WHERE EXTRACT(YEAR FROM pickup_datetime) = 2019;
+output: 43,244,696
+
+Question 2. 
+SELECT COUNT(DISTINCT Affiliated_base_number) AS num_distinct_affiliated_base_number
+FROM `de-zoomcamp-prj-375800.fhv_2019.fhv_tripdata_2019`
+
+SELECT COUNT(DISTINCT Affiliated_base_number) AS num_distinct_affiliated_base_number
+FROM `de-zoomcamp-prj-375800.fhv_2019.fhv_tripdata_2019_native`
+output:
+Native table: Bytes processed 317.94 MB
+External table: Bytes processed 2.52 GB
+
+
+Question 3. 
+SELECT 
+  COUNT(*) AS num_records_with_blank_pu_and_do 
+FROM 
+  `de-zoomcamp-prj-375800.fhv_2019.fhv_tripdata_2019_native`
+WHERE 
+  PUlocationID IS NULL AND DOlocationID IS NULL;
+
+SELECT 
+  COUNT(*) AS num_records_with_blank_pu_and_do 
+FROM 
+  `de-zoomcamp-prj-375800.fhv_2019.fhv_tripdata_2019`
+WHERE 
+  PUlocationID IS NULL AND DOlocationID IS NULL;
+
+output (each query): 717,748
+
+Question 4. 
+partition by pickup_datetime and cluster on affiliated_base_number.
+
+Partitioning the table by pickup_datetime would enable the query engine to only scan the relevant partitions of data rather than scanning the entire table. This can significantly reduce query time and cost.
+
+Clustering the table on affiliated_base_number would ensure that records with the same affiliated_base_number are stored together physically, which can further speed up queries that filter on this column. Clustering on pickup_datetime may also help but would be less effective than clustering on affiliated_base_number given the query patterns specified in the question.
+   
+
+Question 5. 
+CREATE OR REPLACE TABLE `de-zoomcamp-prj-375800.fhv_2019.fhv_tripdata_2019_native_partitioned_clustered`
+PARTITION BY DATE(pickup_datetime)
+CLUSTER BY affiliated_base_number
+AS SELECT * FROM `de-zoomcamp-prj-375800.fhv_2019.fhv_tripdata_2019_native`;
+
+SELECT DISTINCT Affiliated_base_number
+FROM `de-zoomcamp-prj-375800.fhv_2019.fhv_tripdata_2019_native`
+WHERE pickup_datetime BETWEEN '2019-03-01' AND '2019-03-31';
+
+SELECT DISTINCT Affiliated_base_number
+FROM `de-zoomcamp-prj-375800.fhv_2019.fhv_tripdata_2019_native_partitioned_clustered`
+WHERE pickup_datetime BETWEEN '2019-03-01' AND '2019-03-31';
+
+output:
+Native table: Bytes processed 647.87 MB
+Native table partitioned and clustered: Bytes processed 23.05 MB
+12.82 MB for non-partitioned table and 647.87 MB for the partitioned table
+
+Question 6. 
+GCP Bucket
+
+Question 7.
+False. 
+While clustering can improve query performance in some cases, it is not always the best solution for all situations. It is important to analyze the data and the queries that will be run against it to determine if clustering will provide any benefits, and to carefully choose the clustering key. Clustering can also increase storage costs, so it is important to balance performance benefits with the additional costs.
+

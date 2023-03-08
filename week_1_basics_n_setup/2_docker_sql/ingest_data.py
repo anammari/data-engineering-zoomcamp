@@ -8,6 +8,7 @@ from time import time
 
 import pandas as pd
 from sqlalchemy import create_engine
+import urllib.request
 
 
 def main(params):
@@ -26,7 +27,8 @@ def main(params):
     else:
         csv_name = 'output.csv'
 
-    os.system(f"wget {url} -O {csv_name}")
+    #os.system(f"wget {url} -O {csv_name}")
+    urllib.request.urlretrieve(url, csv_name)
 
     engine = create_engine(f'postgresql://{user}:{password}@{host}:{port}/{db}')
 

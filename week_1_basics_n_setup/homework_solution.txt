@@ -1,0 +1,64 @@
+Question 1. Knowing docker tags
+--iidfile string
+
+Question 2. Understanding docker first run
+3
+
+Prepare Postgres:
+- Modify the code in script ingest_data.py to ignore non-existing columns in df. 
+- Build a new version of the ingestion docker image: docker build -t taxi_ingest:v002 .
+- Run the docker run command to ingest the zones_taxi table: 
+    URL=https://s3.amazonaws.com/nyc-tlc/misc/taxi+_zone_lookup.csv
+    docker run -it --network=2_docker_sql_default taxi_ingest:v002 --user=root --password=root --host=pgdatabase --port=5432 --db=ny_taxi --table_name=zones_taxi --url=${URL}
+
+
+Question 3. Count records
+SELECT COUNT(*)
+FROM public.yellow_taxi_trips
+WHERE date_trunc('day', tpep_pickup_datetime) = '2019-01-15'
+AND date_trunc('day', tpep_dropoff_datetime) = '2019-01-15';
+Output: 20530
+
+Question 4. Largest trip for each day
+WITH distances_by_day AS (
+  SELECT 
+    date_trunc('day', tpep_pickup_datetime) as day,
+    sum(trip_distance) as total_distance
+  FROM yellow_taxi_trips
+  GROUP BY day
+)
+SELECT day, total_distance
+FROM distances_by_day
+ORDER BY total_distance DESC
+LIMIT 1;
+Output: "2019-01-25 00:00:00"	83745.79000000033   
+
+Question 5. The number of passengers
+SELECT 
+  passenger_count, 
+  COUNT(*)
+FROM public.yellow_taxi_trips
+WHERE date_trunc('day', tpep_pickup_datetime) = '2019-01-01'
+GROUP BY passenger_count
+HAVING passenger_count IN (2, 3);
+Output: 
+2: 1282 ; 3: 254
+
+Question 6. Largest tip
+WITH pickup_trips AS (
+  SELECT 
+    "DOLocationID",
+    tip_amount
+  FROM public.yellow_taxi_trips ytt
+  INNER JOIN public.zones_taxi zt ON ytt."PULocationID" = zt."LocationID"
+  WHERE zt."Zone" = 'Astoria'
+)
+SELECT 
+  zt."Zone" AS dropoff_zone, 
+  SUM(pickup_trips.tip_amount) AS total_tip
+FROM pickup_trips
+INNER JOIN zones_taxi zt ON pickup_trips."DOLocationID" = zt."LocationID"
+GROUP BY dropoff_zone
+ORDER BY total_tip DESC
+LIMIT 1;
+Output: "Astoria"	3748.0099999999943

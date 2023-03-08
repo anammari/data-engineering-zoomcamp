@@ -1,0 +1,52 @@
+###
+### A complete description of a Prefect Deployment for flow 'web-to-gcs'
+###
+name: Web to GCS Boisalai
+description: null
+version: 93478d26824363f0ded401f9b31afc7d
+# The work queue that will handle this deployment's runs
+work_queue_name: default
+tags: []
+parameters: {"colors" : ['fhv', 'green', 'yellow'], 'year' : 2019}
+schedule: null
+infra_overrides: {}
+infrastructure:
+  type: process
+  env: {}
+  labels: {}
+  name: null
+  command: null
+  stream_output: true
+  working_dir: null
+  block_type_slug: process
+  _block_type_slug: process
+
+###
+### DO NOT EDIT BELOW THIS LINE
+###
+flow_name: web-to-gcs
+manifest_path: null
+storage: null
+path: C:\Users\aammari\OneDrive - The University of Melbourne\github\data-engineering-zoomcamp\week_3_data_warehouse\extras
+entrypoint: web_to_gcs_boisalai.py:web_to_gcs
+parameter_openapi_schema:
+  title: Parameters
+  type: object
+  properties:
+    colors:
+      title: colors
+      default:
+      - fhv
+      - green
+      - yellow
+      position: 0
+      type: array
+      items:
+        type: string
+    year:
+      title: year
+      default: 2019
+      position: 1
+      type: integer
+  required: null
+  definitions: null

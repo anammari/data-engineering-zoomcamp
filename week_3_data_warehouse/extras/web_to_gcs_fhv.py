@@ -49,7 +49,7 @@ def web_to_gcs(year, service):
         r = requests.get(request_url)
         
         # Decompress the gzipped file
-        with gzip.open(io.BytesIO(r.content)) as f:
+        with open(io.BytesIO(r.content)) as f:
             csv_data = f.read().decode('utf-8')
 
         # Convert CSV data to pandas DataFrame

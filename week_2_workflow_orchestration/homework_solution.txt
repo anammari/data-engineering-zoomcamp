@@ -1,0 +1,19 @@
+Question 1. Load January 2020 data
+rows: 447770
+
+Question 2. Scheduling with Cron
+0 5 1 * *
+
+
+Question 3. Loading data to BigQuery
+14851920
+
+Question 4. Github Storage Block
+88,605
+   
+
+Question 5. Email or Slack notifications
+514,392
+
+Question 6. Secrets
+8

@@ -4,11 +4,11 @@ import os
 from google.cloud import storage
 
 # Define parameters
-base_url = 'https://github.com/DataTalksClub/nyc-tlc-data/releases/download/green/'
+base_url = 'https://github.com/DataTalksClub/nyc-tlc-data/releases/download/yellow/'
 years = [2019, 2020]
 months = ['{:02d}'.format(i) for i in range(1, 13)]
 bucket_name = 'dtc_data_lake_de-zoomcamp-prj-375800'
-folder_name = 'green'
+folder_name = 'yellow'
 project_id = 'de-zoomcamp-prj-375800'
 key_path = 'C:/Users/aammari/.gc/de-zoomcamp-prj-375800-02d2ce452b16.json'
 
@@ -24,7 +24,7 @@ if not bucket.exists():
 for year in years:
     for month in months:
         # Download the file
-        file_name = f'green_tripdata_{year}-{month}.csv.gz'
+        file_name = f'yellow_tripdata_{year}-{month}.csv.gz'
         file_url = f'{base_url}{file_name}'
         response = requests.get(file_url)
         
